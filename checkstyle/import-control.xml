@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<!DOCTYPE import-control PUBLIC
+    "-//Puppy Crawl//DTD Import Control 1.0//EN"
+    "http://www.puppycrawl.com/dtds/import_control_1_0.dtd">
+
+    <!--
+        TODO: this is pretty pointless right now as just about all the packages talk to each other.
+        
+        $Id: import-control.xml 761 2010-01-25 01:09:44Z georgina $ This defines legal package dependencies for ACDATA.
+        This should be used to enforce proper use of the application layers.
+    -->
+
+<import-control pkg="au.org.intersect.uploader">
+
+    <allow pkg="java.applet" />
+    <allow pkg="java.awt" />
+    <allow pkg="java.io" />
+    <allow pkg="java.net"/>
+    <allow pkg="java.util" />
+    <allow pkg="java.security" />
+    <allow pkg="javax.swing" />
+    <allow pkg="netscape.javascript" />
+    <allow pkg="org.apache.log4j" />
+    <allow pkg="org.apache.commons" />
+    <allow pkg="org.json" />
+
+    <subpackage name="config">
+    </subpackage>
+    <subpackage name="http">
+        <allow pkg="au.org.intersect.uploader.manager" />
+        <allow pkg="au.org.intersect.uploader.ui" />
+    </subpackage>
+    <subpackage name="main">
+        <allow pkg="au.org.intersect.uploader.config" />
+        <allow pkg="au.org.intersect.uploader.manager" />
+        <allow pkg="au.org.intersect.uploader.ui" />
+    </subpackage>
+    <subpackage name="manager">
+        <allow pkg="au.org.intersect.uploader.http" />
+        <allow pkg="au.org.intersect.uploader.config" />
+        <allow pkg="au.org.intersect.uploader.ui" />
+    </subpackage>
+    <subpackage name="responsehandling">
+        <allow pkg="au.org.intersect.uploader.http" />
+        <allow pkg="au.org.intersect.uploader.ui" />
+    </subpackage>
+    <subpackage name="ui">
+        <allow pkg="au.org.intersect.uploader.config" />
+        <allow pkg="au.org.intersect.uploader.http" />
+        <allow pkg="au.org.intersect.uploader.responsehandling" />
+        <allow pkg="au.org.intersect.uploader.manager" />
+    </subpackage>
+
+</import-control>

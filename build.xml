@@ -1,0 +1,182 @@
+<project name="uploader" basedir="." default="test">
+	<description>Buildfile for Uploader</description>
+
+	<!-- import the shared targets -->
+	<import file="${basedir}/common-build.xml" />
+
+	<!-- project directories -->
+    <property name="dest.project.dir" value="acdata" />
+	<property name="test.lib.dir" location="${basedir}/lib/test" />
+	<property name="app.lib.dir" location="${basedir}/lib/app" />
+
+	<property name="deploy.dir" location="${basedir}/../${dest.project.dir}/public/applets/" />
+	<property name="applet.name" value="${build.dir}/uploader.jar" />
+		
+	<property name="log4j.file" value="${src.dir}/log4j.xml" />
+	<!-- keystore to use for signing, update this later when we have a proper one
+	<property name="externalKeystore" value="??"/> 
+	-->
+	<property name="defaultKeystoreLoc" value="${build.dir}/keystore" />
+    <property name="keystore.alias"     value="uploadapp"/>
+    <property name="keystore.password"  value="uploadapp"/>
+	
+	<!-- path definitions -->
+	<path id="base.classpath">
+		<fileset dir="${app.lib.dir}">
+			<include name="*.jar" />
+		</fileset>
+		<!--instrumented classes go first so they are used if they exist-->
+		<pathelement location="${instrumented.classes.dir}" />
+		<pathelement location="${src.compile.dir}" />
+	</path>
+
+	<path id="test.classpath">
+		<path refid="base.classpath" />
+		<fileset dir="${test.lib.dir}">
+			<include name="*.jar" />
+		</fileset>
+		<pathelement location="${test.compile.dir}" />
+	</path>
+
+	<!-- taskdefs -->
+	<!-- checkstyle -->
+	<taskdef resource="checkstyletask.properties" classpathref="test.classpath" />
+	<!-- cobertura -->
+	<taskdef resource="tasks.properties" classpathref="test.classpath" />
+
+	<!--
+		Private targets - don't do dependency management here. Most stuff is
+		inherited from common-build.xml in intersect-common
+	-->
+	<target name="-jar">
+		<delete file="${applet.name}" />
+		<jar destfile="${applet.name}">
+			<fileset dir="${src.compile.dir}"/>
+			<fileset dir="${src.dir}">
+				<filename name="log4j.xml"/>
+			</fileset>
+		</jar>
+	</target>
+
+    <target name="-instrument-classes">
+        <delete file="cobertura.ser" />
+        <cobertura-instrument todir="${instrumented.classes.dir}">
+            <fileset dir="${src.compile.dir}">
+                <include name="**/*.class" />
+                <exclude name="org/json/*" />
+            	<exclude name="au/org/intersect/uploader/ui/*" />
+            	<exclude name="au/org/intersect/uploader/main/*" />
+            </fileset>
+        </cobertura-instrument>
+    </target>
+
+   <target name="-compile">
+        <javac srcdir="${src.dir}" destdir="${src.compile.dir}" source="1.5" target="1.5" debug="true" deprecation="false" optimize="false" failonerror="true">
+            <classpath refid="base.classpath" />
+            <compilerarg line="-Xlint" />
+        	<exclude name="org/json/*"/>
+        </javac>
+        <javac srcdir="${test.dir}" destdir="${test.compile.dir}" source="1.5" target="1.5" debug="true" deprecation="false" optimize="false" failonerror="true">
+            <classpath refid="test.classpath" />
+            <compilerarg line="-Xlint" />
+        </javac>
+    </target>
+
+	<target name="-deploy">
+		<mkdir dir="${deploy.dir}" />
+		<copy todir="${deploy.dir}" overwrite="true" >
+			<fileset dir="${build.dir}">
+				<include name="*.jar" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="-dist">
+		<copy todir="${dist.dir}" overwrite="true">
+		    <fileset dir="${build.dir}">
+		        <include name="**.jar"/>
+			</fileset>
+		</copy>
+	</target>
+
+   <target name="-checkstyle">
+        <checkstyle config="${shared.checkstyle.config.dir}/intersect_checkstyle_checks.xml" failureproperty="checkstyle.failure" failOnViolation="false" maxWarnings="0">
+
+            <property key="checkstyle_config_dir" value="${project.checkstyle.config.dir}" />
+            <formatter type="xml" tofile="${checkstyle.report.dir}/checkstyle_report.xml" />
+            <formatter type="plain" />
+
+            <fileset dir="${src.dir}" includes="**/*.java" excludes="org/json/*.java" />
+            <fileset dir="${test.dir}" includes="**/*.java" />
+
+            <property key="checkstyle.suppressions.file" value="${project.checkstyle.config.dir}/suppressions.xml" />
+        </checkstyle>
+
+        <xslt in="${checkstyle.report.dir}/checkstyle_report.xml" out="${checkstyle.report.dir}/checkstyle_report.html" style="${shared.checkstyle.config.dir}/checkstyle-noframes.xsl" />
+        <fail if="checkstyle.failure" message="Checkstyle errors exist in the code. Please correct these before checking in!" />
+    </target>
+
+    <target name="-set-keystore-loc">
+        <available file="${externalKeystore}" property="keystoreAlreadyExists"/>
+        <condition property="keystore.loc" value="${externalKeystore}" else="${defaultKeystoreLoc}">
+            <available file="${externalKeystore}"/>
+        </condition>
+    </target>
+
+    <target name="-prepare-keystore" unless="keystoreAlreadyExists">
+        <echo message="WARN: keystore not found, creating new one"/>
+        <delete file="${keystore.loc}" />
+        <genkey alias="${keystore.alias}" storepass="${keystore.password}" keystore="${keystore.loc}">
+            <dname>
+                <param name="CN" value="Intersect" />
+                <param name="OU" value="Projects Division" />
+                <param name="O" value="www.intersect.org.au" />
+                <param name="C" value="AU" />
+            </dname>
+        </genkey>
+    </target>
+
+    <target name="-sign">
+        <echo message="${keystore.alias}"/>
+        <echo message="${keystore.password}"/>
+        <echo message="${keystore.loc}"/>
+        <signjar jar="${applet.name}"
+            alias="${keystore.alias}" storepass="${keystore.password}" keystore="${keystore.loc}" />
+        <signjar jar="${app.lib.dir}/log4j-1.2.15.jar"
+            signedjar="${build.dir}/log4j-1.2.15.jar"
+            alias="${keystore.alias}" storepass="${keystore.password}" keystore="${keystore.loc}"/>
+        <signjar jar="${app.lib.dir}/commons-codec-1.4.jar"
+            signedjar="${build.dir}/commons-codec-1.4.jar"
+            alias="${keystore.alias}" storepass="${keystore.password}" keystore="${keystore.loc}"/>
+        <signjar jar="${app.lib.dir}/commons-httpclient-3.1.jar"
+            signedjar="${build.dir}/commons-httpclient-3.1.jar"
+            alias="${keystore.alias}" storepass="${keystore.password}" keystore="${keystore.loc}"/>
+        <signjar jar="${app.lib.dir}/commons-logging-1.1.1.jar"
+            signedjar="${build.dir}/commons-logging-1.1.1.jar"
+            alias="${keystore.alias}" storepass="${keystore.password}" keystore="${keystore.loc}"/>        
+    </target>
+
+	<!-- public targets - dependency management is done here -->
+	<target name="clean" depends="-clean" description="Delete build artifacts" />
+	<target name="compile" depends="-init, -compile" description="Compile source and test source" />
+	<target name="test" depends="compile, -copy-test-resources, -test"
+		description="Run junit tests" />
+	<target name="test-instrumented"
+		depends="compile, -copy-test-resources, -instrument-classes, -test, -cobertura-report"
+		description="Run unit tests on instrumented classes and generate coverage report" />
+	<target name="checkstyle" depends="-init, -checkstyle"
+		description="Generate a report of code convention violations" />
+	<target name="signed-jar" depends="jar, prepare-keystore, -sign"
+	        description="Build a signed jar containing the applet" />
+	<target name="jar" depends="compile, -jar" description="Build an unsigned jar of the class" />
+	<target name="all"
+		depends="compile, -checkstyle, test"
+		description="Compile, checkstyle, run unit tests" />
+	<target name="hudson-all" depends="clean, compile, checkstyle, test-instrumented"
+		description="Compile, checkstyle, run unit tests with coverage" />
+	<target name="dist" depends="jar, -dist" description="build deployable artifacts" />
+    <target name="prepare-keystore" depends="-set-keystore-loc, -prepare-keystore" description="prepare keystore" />
+	<target name="deploy-to-webapp" depends="-init, -compile, signed-jar, -deploy"
+	        description="Compile applet and move it to the acdata public applet dir" />
+
+</project>

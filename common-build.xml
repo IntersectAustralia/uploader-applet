@@ -1,0 +1,211 @@
+<?xml version="1.0"?>
+
+<project name="Common Ant Tasks" basedir=".">
+
+	<description>Common Tasks that should be reusable across projects</description>
+
+	<!-- source and test code directories - must be the same across all projects which use this build file -->
+	<property name="src.dir" location="src" />
+	<property name="test.dir" location="test" />
+
+	<!-- directories: assumes intersect-common is in same basedir as the project that is using this -->
+	<property name="intersect.common.dir" location="${basedir}/../intersect-common" />
+	<property name="shared.checkstyle.config.dir" location="${intersect.common.dir}/checkstyle" />
+	<property name="project.checkstyle.config.dir" location="checkstyle" />
+	<property name="shared.pmd.config.dir" location="${intersect.common.dir}/pmd" />
+	<property name="tools.lib.dir" location="${intersect.common.dir}/lib" />
+
+	<!-- build directories - same structure across all projects -->
+	<property name="build.dir" location="build/ant" />
+	<property name="src.compile.dir" location="${build.dir}/classes" />
+	<property name="test.compile.dir" location="${build.dir}/test-classes" />
+	<property name="test.reports.dir" location="${build.dir}/junit-report" />
+	<property name="instrumented.classes.dir" location="${build.dir}/classes-instrumented" />
+	<property name="checkstyle.report.dir" location="${build.dir}/checkstyle" />
+	<property name="coverage.report.dir" location="${build.dir}/cobertura" />
+	<property name="pmd.report.dir" location="${build.dir}/pmd" />
+	<property name="findbugs.report.dir" location="${build.dir}/findbugs" />
+	<property name="dist.dir" location="${build.dir}/dist" />
+	<property name="dist.work.dir" location="${build.dir}/work" />
+
+	<!-- tools path definition: libs used by build targets (checkstyle, cobertura etc) -->
+	<path id="tools.classpath">
+		<fileset dir="${tools.lib.dir}">
+			<include name="*.jar" />
+		</fileset>
+	</path>
+
+	<!-- taskdefs -->
+	<!-- checkstyle -->
+	<taskdef resource="checkstyletask.properties" classpathref="tools.classpath" />
+	<!-- cobertura -->
+	<taskdef resource="tasks.properties" classpathref="tools.classpath" />
+	<!-- pmd -->
+	<taskdef name="pmd" classpathref="tools.classpath" classname="net.sourceforge.pmd.ant.PMDTask" />
+	<!-- cpd -->
+	<taskdef name="cpd" classpathref="tools.classpath" classname="net.sourceforge.pmd.cpd.CPDTask" />
+	<!--  findbugs -->
+	<taskdef name="findbugs" classpathref="tools.classpath" classname="edu.umd.cs.findbugs.anttask.FindBugsTask" />
+
+	<!-- common private targets: these are referenced by other projects -->
+	<target name="-clean">
+		<delete dir="${build.dir}" />
+		<delete file="${basedir}/cobertura.ser" />
+	</target>
+
+	<target name="-init">
+		<mkdir dir="${build.dir}" />
+		<mkdir dir="${src.compile.dir}" />
+		<mkdir dir="${test.compile.dir}" />
+		<mkdir dir="${test.reports.dir}" />
+		<mkdir dir="${checkstyle.report.dir}" />
+		<mkdir dir="${coverage.report.dir}" />
+		<mkdir dir="${instrumented.classes.dir}" />
+		<mkdir dir="${pmd.report.dir}" />
+		<mkdir dir="${findbugs.report.dir}" />
+		<mkdir dir="${dist.dir}" />
+		<mkdir dir="${dist.work.dir}" />
+	</target>
+
+	<target name="-set-target-env" unless="target-env">
+		<property name="target-env" value="dev" />
+		<echo message="Setting target environment to dev" />
+		<echo message="To specify a different environment use 'ant -Dtarget-env=[dev|test|prod] ...'" />
+	</target>
+
+	<target name="-is-prod">
+		<condition property="is-prod">
+			<equals arg1="${target-env}" arg2="prod" />
+		</condition>
+	</target>
+
+	<target name="-compile">
+		<javac srcdir="${src.dir}" destdir="${src.compile.dir}" source="1.5" target="1.5" debug="true" deprecation="false" optimize="false" failonerror="true">
+			<classpath refid="base.classpath" />
+			<compilerarg line="-Xlint" />
+		</javac>
+		<javac srcdir="${test.dir}" destdir="${test.compile.dir}" source="1.5" target="1.5" debug="true" deprecation="false" optimize="false" failonerror="true">
+			<classpath refid="test.classpath" />
+			<compilerarg line="-Xlint" />
+		</javac>
+	</target>
+
+	<target name="-copy-test-resources">
+		<copy todir="${test.compile.dir}">
+			<fileset dir="${test.dir}">
+				<include name="**/*.xml" />
+				<include name="**/*.properties" />
+			</fileset>
+		</copy>
+	</target>
+
+	<target name="-test">
+		<junit fork="yes" forkmode="perBatch" printsummary="yes" failureproperty="junit.failure">
+			<classpath refid="test.classpath" />
+			<formatter type="xml" />
+
+			<batchtest todir="${test.reports.dir}">
+				<fileset dir="${test.compile.dir}">
+					<include name="**/*Test.class" />
+					<include name="**/Test*.class" />
+					<exclude name="**/TestFixture.class" />
+				</fileset>
+			</batchtest>
+
+			<jvmarg value="-Xmx512M" />
+		</junit>
+
+		<junitreport todir="${test.reports.dir}">
+			<fileset dir="${test.reports.dir}">
+				<include name="TEST-*.xml" />
+			</fileset>
+			<report todir="${test.reports.dir}" />
+		</junitreport>
+
+		<fail if="junit.failure" message="Unit test(s) failed. Check reports for details." />
+	</target>
+
+	<target name="-instrument-classes">
+		<delete file="cobertura.ser" />
+		<cobertura-instrument todir="${instrumented.classes.dir}">
+			<fileset dir="${src.compile.dir}">
+				<include name="**/*.class" />
+				<exclude name="*${project.specific.cobertura.excludes}" />
+			</fileset>
+		</cobertura-instrument>
+	</target>
+
+	<target name="-cobertura-report">
+		<cobertura-report format="xml" destdir="${coverage.report.dir}" srcdir="${src.dir}" />
+		<cobertura-report format="html" destdir="${coverage.report.dir}">
+			<fileset dir="${src.dir}">
+				<include name="**/*" />
+			</fileset>
+		</cobertura-report>
+	</target>
+
+	<target name="-checkstyle">
+		<checkstyle config="${shared.checkstyle.config.dir}/intersect_checkstyle_checks.xml" failureproperty="checkstyle.failure" failOnViolation="false" maxWarnings="0">
+
+			<property key="checkstyle_config_dir" value="${project.checkstyle.config.dir}" />
+			<formatter type="xml" tofile="${checkstyle.report.dir}/checkstyle_report.xml" />
+			<formatter type="plain" />
+
+			<fileset dir="${src.dir}" includes="**/*.java" />
+			<fileset dir="${test.dir}" includes="**/*.java" />
+
+			<property key="checkstyle.suppressions.file" value="${project.checkstyle.config.dir}/suppressions.xml" />
+		</checkstyle>
+
+		<xslt in="${checkstyle.report.dir}/checkstyle_report.xml" out="${checkstyle.report.dir}/checkstyle_report.html" style="${shared.checkstyle.config.dir}/checkstyle-noframes.xsl" />
+		<fail if="checkstyle.failure" message="Checkstyle errors exist in the code. Please correct these before checking in!" />
+	</target>
+
+	<target name="-cpd">
+		<cpd minimumtokencount="50" outputFile="${pmd.report.dir}/cpd_report.xml" format="xml">
+			<fileset dir="${src.dir}">
+				<include name="**/*.java" />
+			</fileset>
+		</cpd>
+		<xslt in="${pmd.report.dir}/cpd_report.xml" style="${shared.pmd.config.dir}/xslt/cpdhtml.xslt" out="${pmd.report.dir}/cpd_report.html" />
+	</target>
+
+	<target name="-pmd">
+		<pmd shortFilenames="true">
+			<ruleset>${shared.pmd.config.dir}/intersect_ruleset.xml</ruleset>
+			<formatter type="xml" tofile="${pmd.report.dir}/pmd_report.xml" />
+			<fileset dir="${src.dir}">
+				<include name="**/*.java" />
+			</fileset>
+		</pmd>
+		<xslt in="${pmd.report.dir}/pmd_report.xml" style="${shared.pmd.config.dir}/xslt/pmd-report.xslt" out="${pmd.report.dir}/pmd_report.html" />
+	</target>
+
+	<property name="findbugs.home" value="${intersect.common.dir}" />
+	<target name="-findbugs">
+		<findbugs home="${findbugs.home}" output="xml" outputFile="${findbugs.report.dir}/findbugs.xml" workHard="">
+			<auxClasspath>
+				<path refid="base.classpath" />
+				<path refid="test.classpath" />
+			</auxClasspath>
+			<sourcePath path="${src.dir}" />
+			<class location="${src.compile.dir}/" />
+		</findbugs>
+	</target>
+
+	<target name="-detect-os">
+		<!-- detect the current os - if properties are already set elsewhere this will NOT override -->
+		<condition property="isMacCocoa64">
+			<os family="mac" />
+		</condition>
+
+		<condition property="isWin32">
+			<os family="windows" />
+		</condition>
+
+		<condition property="isLinux32">
+			<os family="unix" />
+		</condition>
+	</target>
+
+</project>

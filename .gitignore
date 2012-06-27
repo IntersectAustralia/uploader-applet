@@ -1,0 +1,12 @@
+rdoc
+doc
+.yardoc
+.bundle
+pkg
+.DS_Store
+*.swp
+.svn
+certreq.csr
+build
+bin
+*keystore
